@@ -1,0 +1,140 @@
+tic;
+clc;
+clear all; %#ok<CLALL> 
+close all;
+% Read the color image
+synImage = imread('shuffledimage.jpg');
+r=synImage(:,:,1);
+g=synImage(:,:,2);
+b=synImage(:,:,3);
+
+%reshaping of image pixels into array
+r1=reshape(r,[1,65536]);
+g1=reshape(g,[1,65536]);
+b1=reshape(b,[1,65536]);
+
+r2=imbinarize(r1);
+g2=imbinarize(g1);
+b2=imbinarize(b1);
+
+R2 = r2(randperm(numel(r2)));
+numPositions = 7;
+Shuffledr2 = circshift(R2, numPositions);
+shuffledr2=~bitxor(r2,Shuffledr2);
+G2 = g2(randperm(numel(g2)));
+numPositions = 7;
+Shuffledg2 = circshift(G2, numPositions);
+shuffledg2=~bitxor(g2,Shuffledg2);
+B2 = b2(randperm(numel(b2)));
+numPositions = 7;
+Shuffledb2 = circshift(B2, numPositions);
+shuffledb2=~bitxor(b2,Shuffledb2);
+
+conctated=[shuffledr2 shuffledb2 shuffledg2];
+
+
+
+% combination of logistic and henon
+% Set the parameters
+a = 1.4;
+b = 0.3;
+r = 3.8;
+n = 256; % Number of iterations
+
+% Initialize the sequences
+x(1) = 0.5; % logistic map
+y(1) = 0; % henon map
+z(1) = 0;
+
+% Generate the sequences
+for i = 2:n
+    x(i) = r * x(i-1) * (1 - x(i-1)); %#ok<SAGROW>
+  
+    y(i) = 1 - a * y(i-1)^2 + z(i-1); %#ok<SAGROW> 
+    z(i) = b * y(i-1); %#ok<SAGROW> 
+end
+
+Z = bitxor(uint8(x*256),uint8(y*256));
+key = imbinarize(Z);
+ckey = bitxor(uint8(z*256),uint8(key*256));
+Ckey = imbinarize(ckey);
+
+newArray = repelem(Ckey, 768);
+
+xorkeys = bitxor(conctated, newArray);
+
+
+
+% Normalize pixel values 
+image = floor(double(conctated) / 64);
+
+    
+% Map pixel values to nucleotides
+nucleotide_map = containers.Map({0, 1, 2, 3}, {'A', 'C', 'G', 'T'});
+nucleotides = cellstr(values(nucleotide_map, num2cell(image(:))));
+    
+% Convert nucleotides to DNA sequence
+dna_seq = strcat(nucleotides{:});
+
+%Convert the DNA sequence to a numeric vector
+dna_num = nt2int(dna_seq); 
+key2=logical(dna_num);
+
+dnaencoded=bitxor(key2,xorkeys);
+
+
+% %julia set
+real_axis = linspace(-2, 2, size(synImage,2));
+
+ % define range of real axis
+ imag_axis = linspace(-2, 2, size(synImage,1)); % define range of imaginary axis
+[real_vals, imag_vals] = meshgrid(real_axis, imag_axis); % create meshgrid
+% 
+ c = -0.8 + 0.156i; % set the constant value
+ z = complex(real_vals, imag_vals); % create complex number from real and imaginary values
+ julia_set = zeros(size(z)); % initialize Julia set
+ for i = 1:100 % iterate 100 times
+    z = z.^2 + c; % apply formula
+%     disp(z);
+   julia_set(abs(z) > 2) = i; % set value to number of iterations if absolute value of z is greater than 2
+%    disp(i);
+ end
+ figure(1);
+ imagesc(julia_set);
+ axis equal;
+ axis off;
+  colormap(jet);
+
+% Define the complex function f(z) = z^2 + c
+c = -0.8 + 0.156i;
+f = @(z) z.^2 + c;
+
+
+% Create a grid of complex numbers in the region of interest
+x = linspace(-2, 2, 8);
+y = linspace(-2, 2, 32);
+[X, Y] = meshgrid(x, y);
+Z = X + 1i*Y;
+
+% Initialize an array to store the values of the Julia set
+julia_set = zeros(size(Z));
+
+% Iterate the function f a large number of times for each point in the grid
+for i = 1:512
+    Z = f(Z);
+    idx = abs(Z) > 2; % Check whether the absolute value of the result is greater than a certain threshold
+    julia_set(idx) = 1; % Set the corresponding point in the array to 
+end
+
+% Use the resulting binary array as a key
+key3 = julia_set(:)';
+KEY3=repelem(key3, 768);
+KEy3=logical(KEY3);
+finalkey=bitxor(dnaencoded,KEy3);
+shuffledKeyArray = finalkey(randperm(numel(finalkey)));
+
+
+f = fopen('final_key.txt','wt');
+fprintf(f,'%d', shuffledKeyArray);
+fclose(f);
+toc;
